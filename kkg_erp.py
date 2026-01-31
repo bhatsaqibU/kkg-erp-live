@@ -1,129 +1,103 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 import datetime
 import time
 from fpdf import FPDF
+import os
 
 # ==========================================
-# 1. VISUAL DESIGN ENGINE (Platinum UI)
+# 1. DATABASE ADAPTER (Hybrid)
+# ==========================================
+class DBHandler:
+    def __init__(self):
+        # Check if running on Cloud
+        if "postgres" in st.secrets:
+            self.type = "POSTGRES"
+            import psycopg2
+            self.lib = psycopg2
+            self.dsn = st.secrets["postgres"]["url"]
+        else:
+            self.type = "SQLITE"
+            import sqlite3
+            self.lib = sqlite3
+            self.db_file = "kkg_database.sqlite"
+
+    def get_conn(self):
+        try:
+            if self.type == "POSTGRES":
+                return self.lib.connect(self.dsn)
+            else:
+                return self.lib.connect(self.db_file, check_same_thread=False)
+        except Exception as e:
+            st.error(f"Database Connection Failed: {e}")
+            st.stop()
+
+    def run_query(self, query, params=None, fetch=False):
+        conn = self.get_conn()
+        if self.type == "POSTGRES":
+            query = query.replace('?', '%s')
+            
+        try:
+            if self.type == "SQLITE":
+                conn.row_factory = self.lib.Row
+                cur = conn.cursor()
+            else:
+                cur = conn.cursor()
+                
+            if params:
+                cur.execute(query, params)
+            else:
+                cur.execute(query)
+            
+            if fetch:
+                cols = [desc[0] for desc in cur.description]
+                res = [dict(zip(cols, row)) for row in cur.fetchall()]
+                conn.close()
+                return res
+            else:
+                conn.commit()
+                conn.close()
+                return True
+        except Exception as e:
+            conn.close()
+            st.error(f"DB Query Error: {e}")
+            return [] if fetch else False
+
+db = DBHandler()
+
+# ==========================================
+# 2. INITIALIZATION
+# ==========================================
+def init_db_tables():
+    pk_def = "SERIAL PRIMARY KEY" if db.type == "POSTGRES" else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    queries = [
+        f'''CREATE TABLE IF NOT EXISTS products (id {pk_def}, name TEXT, category TEXT, price REAL, stock INTEGER)''',
+        '''CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY, name TEXT, address TEXT, joined_date TEXT)''',
+        '''CREATE TABLE IF NOT EXISTS transactions (invoice_id TEXT PRIMARY KEY, customer_phone TEXT, date TEXT, type TEXT, total_amount REAL, paid_amount REAL, due_amount REAL, payment_mode TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''',
+        f'''CREATE TABLE IF NOT EXISTS invoice_items (id {pk_def}, invoice_id TEXT, product_name TEXT, quantity INTEGER, unit_price REAL, total_price REAL)'''
+    ]
+    for q in queries:
+        db.run_query(q)
+
+init_db_tables()
+
+# ==========================================
+# 3. VISUAL CONFIG & UTILS
 # ==========================================
 st.set_page_config(page_title="KKG ERP", page_icon="🚜", layout="wide")
+BUSINESS_INFO = {"name": "KISAN KHIDMAT GHAR", "address": "Chakoora, Pulwama, J&K", "phone": "+91 9906XXXXXX"}
 
-# This CSS exactly mimics the React Design you liked
 st.markdown("""
     <style>
-    /* 1. Main Background */
-    .stApp {
-        background-color: #f8fafc; /* Slate-50 */
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* 2. Sidebar Styling (Deep Navy) */
-    [data-testid="stSidebar"] {
-        background-color: #0f172a; /* Slate-900 */
-        border-right: 1px solid #1e293b;
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p {
-        color: #f8fafc !important;
-    }
-    [data-testid="stRadio"] label {
-        color: #94a3b8 !important; /* Slate-400 */
-        font-weight: 500;
-        padding: 10px;
-        border-radius: 6px;
-        transition: all 0.2s;
-    }
-    [data-testid="stRadio"] label:hover {
-        background-color: #1e293b;
-        color: white !important;
-    }
-    /* Active Menu Item (Bright Blue) */
-    div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #2563eb !important; /* Blue-600 */
-        color: white !important;
-        font-weight: 600;
-    }
-
-    /* 3. Cards & Metrics */
-    div[data-testid="stMetric"], div.css-1r6slb0 {
-        background-color: white !important;
-        border: 1px solid #e2e8f0;
-        padding: 24px !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    }
-    [data-testid="stMetricLabel"] p {
-        color: #64748b !important; /* Slate-500 */
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    [data-testid="stMetricValue"] div {
-        color: #0f172a !important; /* Slate-900 */
-        font-size: 30px !important;
-        font-weight: 700 !important;
-    }
-
-    /* 4. Tables & Lists */
-    .row-widget {
-        background-color: white;
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #e2e8f0;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    .row-header {
-        background-color: #f1f5f9;
-        padding: 15px;
-        border-radius: 8px 8px 0 0;
-        border: 1px solid #e2e8f0;
-        border-bottom: none;
-        font-weight: 600;
-        color: #475569;
-    }
-
-    /* 5. Inputs & Buttons */
-    .stTextInput input, .stNumberInput input, .stSelectbox select {
-        border-radius: 8px;
-        border: 1px solid #cbd5e1;
-        padding: 10px;
-    }
-    .stButton button {
-        background-color: #2563eb;
-        color: white !important;
-        border-radius: 8px;
-        border: none;
-        padding: 0.6rem 1.2rem;
-        font-weight: 600;
-        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
-    }
-    .stButton button:hover {
-        background-color: #1d4ed8;
-    }
-    /* Danger Button Styling */
-    button[kind="secondary"] {
-        background-color: #fee2e2 !important;
-        color: #ef4444 !important;
-        border: 1px solid #fecaca !important;
-    }
-    button[kind="secondary"]:hover {
-        background-color: #fecaca !important;
-    }
+    .stApp { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+    [data-testid="stSidebar"] { background-color: #0f172a; border-right: 1px solid #1e293b; }
+    [data-testid="stSidebar"] * { color: #f8fafc !important; }
+    div[data-testid="stMetric"] { background-color: white; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; }
+    [data-testid="stMetricValue"] { color: #0f172a !important; font-weight: 700; }
+    .stButton button { background-color: #2563eb; color: white !important; font-weight: 600; border-radius: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
-# Config
-BUSINESS_INFO = {"name": "KISAN KHIDMAT GHAR", "address": "Chakoora, Pulwama, J&K", "phone": "+91 9906XXXXXX"}
-DB_FILE = "kkg_database.sqlite"
-
-# ==========================================
-# 2. PDF ENGINE (Robust Version)
-# ==========================================
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 18)
@@ -137,12 +111,10 @@ class PDF(FPDF):
 def generate_invoice_pdf(tx_data, items, cust_data):
     pdf = PDF()
     pdf.add_page()
-    
     pdf.set_font('Arial', 'B', 14)
     pdf.cell(0, 10, "INVOICE", 0, 1, 'C')
     pdf.ln(5)
     
-    # Info Block
     pdf.set_font('Arial', '', 10)
     pdf.cell(100, 5, f"Bill To: {cust_data['name']}", 0, 0)
     pdf.cell(90, 5, f"Invoice #: {tx_data['invoice_id']}", 0, 1, 'R')
@@ -150,8 +122,7 @@ def generate_invoice_pdf(tx_data, items, cust_data):
     pdf.cell(90, 5, f"Date: {tx_data['date']}", 0, 1, 'R')
     pdf.ln(10)
     
-    # Table
-    pdf.set_fill_color(241, 245, 249) # Slate-100
+    pdf.set_fill_color(241, 245, 249)
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(90, 10, 'Item', 1, 0, 'L', 1)
     pdf.cell(30, 10, 'Rate', 1, 0, 'R', 1)
@@ -160,369 +131,171 @@ def generate_invoice_pdf(tx_data, items, cust_data):
     
     pdf.set_font('Arial', '', 10)
     for item in items:
-        # Robust handling for different data structures (Cart vs DB)
-        # 1. Product Name
-        name = "Unknown"
-        if isinstance(item, dict):
-            name = item.get('product_name') or item.get('name') or "Unknown"
-        else: # Access by attribute/column if row object
-            name = getattr(item, 'product_name', getattr(item, 'name', "Unknown"))
-
-        # 2. Price/Rate
-        price = 0.0
-        if isinstance(item, dict):
-            price = item.get('unit_price') or item.get('price') or 0.0
-        else:
-            price = getattr(item, 'unit_price', getattr(item, 'price', 0.0))
-
-        # 3. Quantity
-        qty = 0
-        if isinstance(item, dict):
-            qty = item.get('quantity') or item.get('qty') or 0
-        else:
-            qty = getattr(item, 'quantity', getattr(item, 'qty', 0))
-
-        # 4. Total
-        total = 0.0
-        if isinstance(item, dict):
-            total = item.get('total_price') or item.get('total') or 0.0
-        else:
-            total = getattr(item, 'total_price', getattr(item, 'total', 0.0))
-        
-        # Ensure numeric values
-        try: price = float(price) 
-        except: price = 0.0
-        try: total = float(total)
-        except: total = 0.0
-
+        name = item.get('product_name') or item.get('name') or "Unknown"
+        price = float(item.get('unit_price') or item.get('price') or 0)
+        qty = int(item.get('quantity') or item.get('qty') or 0)
+        total = float(item.get('total_price') or item.get('total') or 0)
         pdf.cell(90, 10, str(name), 1, 0, 'L')
         pdf.cell(30, 10, f"{price:.0f}", 1, 0, 'R')
         pdf.cell(30, 10, str(qty), 1, 0, 'C')
         pdf.cell(40, 10, f"{total:.0f}", 1, 1, 'R')
-        
+    
     pdf.ln(5)
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(150, 10, 'Grand Total', 0, 0, 'R')
     pdf.cell(40, 10, f"Rs {tx_data['total_amount']:.0f}", 1, 1, 'R')
-    
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
-# 3. DATABASE
-# ==========================================
-def get_db():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, category TEXT, price REAL, stock INTEGER)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY, name TEXT, address TEXT, joined_date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS transactions (invoice_id TEXT PRIMARY KEY, customer_phone TEXT, date TEXT, type TEXT, total_amount REAL, paid_amount REAL, due_amount REAL, payment_mode TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS invoice_items (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id TEXT, product_name TEXT, quantity INTEGER, unit_price REAL, total_price REAL)''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
-# ==========================================
-# 4. MAIN APP
+# 4. APP UI
 # ==========================================
 def main():
-    # Styled Sidebar Header
-    st.sidebar.markdown("""
-        <div style='text-align: center; padding: 20px 0;'>
-            <div style='font-size: 3rem;'>🚜</div>
-            <h2 style='color: white; margin: 0;'>KKG ERP</h2>
-            <p style='color: #64748b; font-size: 0.8rem;'>Platinum Edition</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    menu = st.sidebar.radio("Navigation", ["Dashboard", "Billing (POS)", "Inventory", "Customers", "Ledger"], label_visibility="collapsed")
+    st.sidebar.markdown("""<div style='text-align: center; padding: 20px;'><h1>🚜 KKG ERP</h1></div>""", unsafe_allow_html=True)
+    menu = st.sidebar.radio("Navigation", ["Dashboard", "Billing (POS)", "Inventory", "Customers", "Ledger"])
 
     # --- DASHBOARD ---
     if menu == "Dashboard":
         st.title("Executive Dashboard")
-        conn = get_db()
         today = datetime.date.today().isoformat()
         
-        # Metrics
-        sales = pd.read_sql(f"SELECT SUM(total_amount) as v FROM transactions WHERE date='{today}' AND type='SALE'", conn).iloc[0]['v'] or 0
-        receivables = (pd.read_sql("SELECT SUM(total_amount) as v FROM transactions WHERE type='SALE'", conn).iloc[0]['v'] or 0) - \
-                      (pd.read_sql("SELECT SUM(paid_amount) as v FROM transactions", conn).iloc[0]['v'] or 0)
-        low_stock = pd.read_sql("SELECT COUNT(*) as c FROM products WHERE stock < 5", conn).iloc[0]['c']
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Today's Sales", f"₹{sales:,.0f}")
-        c2.metric("Market Receivables", f"₹{receivables:,.0f}")
-        c3.metric("Low Stock Alerts", f"{low_stock}")
-        
-        # Graphs
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            st.markdown("### 📈 Sales Trend")
-            trend = pd.read_sql("SELECT date, SUM(total_amount) as sales FROM transactions WHERE type='SALE' GROUP BY date ORDER BY date DESC LIMIT 7", conn)
-            if not trend.empty:
-                st.line_chart(trend.set_index('date'), height=250)
-            else:
-                st.info("No data yet")
-                
-        with col_g2:
-            st.markdown("### 🏆 Top Products")
-            top = pd.read_sql("SELECT product_name, SUM(quantity) as qty FROM invoice_items GROUP BY product_name ORDER BY qty DESC LIMIT 5", conn)
-            if not top.empty:
-                st.bar_chart(top.set_index('product_name'), height=250)
-            else:
-                st.info("No data yet")
+        try:
+            res_sales = db.run_query("SELECT SUM(total_amount) as v FROM transactions WHERE date=? AND type='SALE'", (today,), fetch=True)
+            sales = res_sales[0]['v'] if res_sales and res_sales[0]['v'] else 0
+            
+            res_tot = db.run_query("SELECT SUM(total_amount) as v FROM transactions WHERE type='SALE'", fetch=True)
+            tot_sales = res_tot[0]['v'] if res_tot and res_tot[0]['v'] else 0
+            
+            res_paid = db.run_query("SELECT SUM(paid_amount) as v FROM transactions", fetch=True)
+            tot_paid = res_paid[0]['v'] if res_paid and res_paid[0]['v'] else 0
+            
+            res_stock = db.run_query("SELECT COUNT(*) as c FROM products WHERE stock < 5", fetch=True)
+            low_stock = res_stock[0]['c'] if res_stock and res_stock[0]['c'] else 0
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Today's Sales", f"₹{sales:,.0f}")
+            c2.metric("Market Receivables", f"₹{tot_sales - tot_paid:,.0f}")
+            c3.metric("Low Stock Alerts", f"{low_stock}")
+        except:
+            st.info("System initialized. Please add customers and products.")
 
-    # --- INVENTORY (Bulk Delete Enhanced) ---
+    # --- INVENTORY ---
     elif menu == "Inventory":
-        st.title("📦 Inventory Management")
+        st.title("📦 Inventory")
+        with st.expander("Add Product"):
+            with st.form("add"):
+                n = st.text_input("Name"); p = st.number_input("Price", min_value=0.0); s = st.number_input("Stock", min_value=0)
+                if st.form_submit_button("Save"):
+                    db.run_query("INSERT INTO products (name, price, stock) VALUES (?,?,?)", (n,p,s))
+                    st.success("Saved"); st.rerun()
         
-        with st.expander("➕ Add New Product", expanded=False):
-            with st.form("add_p"):
-                c1, c2, c3 = st.columns(3)
-                n = c1.text_input("Name")
-                p = c2.number_input("Price (₹)", min_value=0.0)
-                s = c3.number_input("Stock Qty", min_value=0)
-                if st.form_submit_button("Save Product"):
-                    conn = get_db()
-                    conn.execute("INSERT INTO products (name, price, stock) VALUES (?,?,?)", (n,p,s))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Added {n}")
+        prods = db.run_query("SELECT * FROM products", fetch=True)
+        if prods:
+            df = pd.DataFrame(prods)
+            for i, r in df.iterrows():
+                c1, c2, c3, c4 = st.columns([2,1,1,1])
+                c1.write(f"**{r['name']}**")
+                c2.write(f"₹{r['price']}")
+                c3.write(f"{r['stock']}")
+                if c4.button("Delete", key=f"d_{r['id']}"):
+                    db.run_query("DELETE FROM products WHERE id=?", (r['id'],))
                     st.rerun()
+        else:
+            st.warning("No products found.")
 
-        conn = get_db()
-        products = pd.read_sql("SELECT * FROM products", conn)
-        conn.close()
-
-        if not products.empty:
-            # Table Header
-            st.markdown("""
-            <div class="row-header" style="display: flex;">
-                <div style="flex: 0.5;">Sel</div>
-                <div style="flex: 2;">Name</div>
-                <div style="flex: 1;">Price</div>
-                <div style="flex: 1;">Stock</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            selected_ids = []
-            
-            for _, row in products.iterrows():
-                c_sel, c1, c2, c3 = st.columns([0.5, 2, 1, 1])
-                with c_sel:
-                    if st.checkbox("", key=f"sel_{row['id']}"):
-                        selected_ids.append(row['id'])
-                with c1: st.write(f"**{row['name']}**")
-                with c2: st.write(f"₹{row['price']}")
-                with c3: 
-                    color = "red" if row['stock'] < 5 else "green"
-                    st.markdown(f"<span style='color:{color}; font-weight:bold'>{row['stock']}</span>", unsafe_allow_html=True)
-                st.markdown("<hr style='margin: 0; border-top: 1px solid #f1f5f9;'>", unsafe_allow_html=True)
-            
-            if selected_ids:
-                st.write("") # Spacer
-                if st.button(f"🗑️ Delete Selected ({len(selected_ids)})", type="primary"):
-                    conn = get_db()
-                    for pid in selected_ids:
-                        conn.execute("DELETE FROM products WHERE id=?", (pid,))
-                    conn.commit()
-                    conn.close()
-                    st.success("Deleted successfully!")
-                    time.sleep(0.5)
-                    st.rerun()
-
-    # --- CUSTOMERS (Bulk Delete Enhanced) ---
+    # --- CUSTOMERS ---
     elif menu == "Customers":
-        st.title("👥 Customer Management")
+        st.title("👥 Customers")
+        with st.expander("Register Customer"):
+            with st.form("cust"):
+                n = st.text_input("Name"); p = st.text_input("Phone"); a = st.text_input("Address")
+                if st.form_submit_button("Save"):
+                    if db.run_query("INSERT INTO customers VALUES (?,?,?,?)", (p,n,a,str(datetime.date.today()))):
+                        st.success("Saved"); st.rerun()
+                    else: st.error("Phone exists")
         
-        with st.expander("➕ Register Customer", expanded=False):
-            with st.form("add_c"):
-                n = st.text_input("Name")
-                ph = st.text_input("Phone (ID)")
-                loc = st.text_input("Address")
-                if st.form_submit_button("Register"):
-                    conn = get_db()
-                    try:
-                        conn.execute("INSERT INTO customers VALUES (?,?,?,?)", (ph, n, loc, datetime.date.today()))
-                        conn.commit()
-                        st.success("Saved")
-                        st.rerun()
-                    except: st.error("Phone exists")
-                    conn.close()
+        custs = db.run_query("SELECT * FROM customers", fetch=True)
+        if custs:
+            df = pd.DataFrame(custs)
+            for i, r in df.iterrows():
+                c1, c2, c3 = st.columns([2,2,1])
+                c1.write(r['name']); c2.write(r['phone'])
+                if c3.button("Delete", key=f"dc_{r['phone']}"):
+                    db.run_query("DELETE FROM customers WHERE phone=?", (r['phone'],)); st.rerun()
+        else:
+            st.warning("No customers found.")
 
-        conn = get_db()
-        custs = pd.read_sql("SELECT * FROM customers", conn)
-        conn.close()
-
-        if not custs.empty:
-            st.markdown("""
-            <div class="row-header" style="display: flex;">
-                <div style="flex: 0.5;">Sel</div>
-                <div style="flex: 2;">Name</div>
-                <div style="flex: 2;">Phone</div>
-                <div style="flex: 2;">Address</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            selected_phones = []
-            
-            for _, row in custs.iterrows():
-                c_sel, c1, c2, c3 = st.columns([0.5, 2, 2, 2])
-                with c_sel:
-                    if st.checkbox("", key=f"sel_c_{row['phone']}"):
-                        selected_phones.append(row['phone'])
-                with c1: st.write(f"**{row['name']}**")
-                with c2: st.write(f"{row['phone']}")
-                with c3: st.write(f"{row['address']}")
-                st.markdown("<hr style='margin: 0; border-top: 1px solid #f1f5f9;'>", unsafe_allow_html=True)
-                
-            if selected_phones:
-                st.write("")
-                if st.button(f"🗑️ Delete Selected Customers ({len(selected_phones)})", type="primary"):
-                    conn = get_db()
-                    deleted_count = 0
-                    blocked_count = 0
-                    
-                    for phone in selected_phones:
-                        # Safety check
-                        tx_count = pd.read_sql(f"SELECT count(*) as c FROM transactions WHERE customer_phone='{phone}'", conn).iloc[0]['c']
-                        if tx_count > 0:
-                            blocked_count += 1
-                        else:
-                            conn.execute("DELETE FROM customers WHERE phone=?", (phone,))
-                            deleted_count += 1
-                            
-                    conn.commit()
-                    conn.close()
-                    
-                    msg = f"Deleted {deleted_count} customers."
-                    if blocked_count > 0:
-                        msg += f" (Skipped {blocked_count} due to existing transactions)."
-                    
-                    if blocked_count > 0: st.warning(msg)
-                    else: st.success(msg)
-                    
-                    time.sleep(1)
-                    st.rerun()
-
-    # --- POS (Billing) ---
+    # --- BILLING ---
     elif menu == "Billing (POS)":
-        st.title("🛒 Point of Sale")
-        conn = get_db()
-        cust_df = pd.read_sql("SELECT * FROM customers", conn)
-        inv_df = pd.read_sql("SELECT * FROM products", conn)
-        conn.close()
-
-        if cust_df.empty or inv_df.empty:
-            st.warning("Setup Inventory & Customers first.")
-            return
-
+        st.title("🛒 POS")
+        custs = db.run_query("SELECT * FROM customers", fetch=True)
+        prods = db.run_query("SELECT * FROM products", fetch=True)
+        
+        if not custs or not prods: st.warning("Add Customers & Inventory first"); st.stop()
+        
         c1, c2 = st.columns([1.5, 1])
         with c1:
-            st.markdown("### Select Items")
-            cust_list = cust_df['name'] + " (" + cust_df['phone'] + ")"
-            sel_cust_str = st.selectbox("Select Customer", cust_list)
-            sel_phone = sel_cust_str.split('(')[-1].strip(')')
+            # Dropdowns
+            c_idx = st.selectbox("Customer", range(len(custs)), format_func=lambda x: f"{custs[x]['name']} ({custs[x]['phone']})")
+            sel_cust = custs[c_idx]
             
-            prod_opts = {f"{r['name']} (₹{r['price']} | Stock: {r['stock']})": r for _, r in inv_df.iterrows()}
-            sel_prod_k = st.selectbox("Search Product", list(prod_opts.keys()))
-            sel_prod = prod_opts[sel_prod_k]
+            p_idx = st.selectbox("Product", range(len(prods)), format_func=lambda x: f"{prods[x]['name']} (₹{prods[x]['price']})")
+            sel_prod = prods[p_idx]
             
-            col_q, col_b = st.columns([1, 1])
-            qty = col_q.number_input("Quantity", min_value=1, value=1)
+            qty = st.number_input("Qty", min_value=1, value=1)
             
             if 'cart' not in st.session_state: st.session_state.cart = []
             
-            if col_b.button("Add to Bill"):
-                # Stock Check Logic
-                in_cart = sum(i['qty'] for i in st.session_state.cart if i['id'] == sel_prod['id'])
-                if (in_cart + qty) > sel_prod['stock']:
-                    st.error(f"❌ Stock Error! Only {sel_prod['stock']} available.")
-                else:
-                    item = sel_prod.to_dict()
-                    item['qty'] = qty
-                    item['total'] = qty * sel_prod['price']
-                    st.session_state.cart.append(item)
-                    st.success("Added")
-
+            if st.button("Add"):
+                item = dict(sel_prod)
+                item['qty'] = qty
+                item['total'] = qty * sel_prod['price']
+                st.session_state.cart.append(item)
+        
         with c2:
-            st.markdown("### Current Bill")
+            st.subheader("Cart")
             if st.session_state.cart:
-                cart_df = pd.DataFrame(st.session_state.cart)
-                # Display Cart with Delete Option
-                for idx, row in cart_df.iterrows():
-                    cols = st.columns([3, 1, 1])
-                    cols[0].write(f"{row['name']} x{row['qty']}")
-                    cols[1].write(f"₹{row['total']}")
-                    if cols[2].button("X", key=f"rm_{idx}", type="secondary"):
-                        st.session_state.cart.pop(idx)
-                        st.rerun()
+                df = pd.DataFrame(st.session_state.cart)
+                st.dataframe(df[['name', 'qty', 'total']], use_container_width=True)
                 
-                grand_total = cart_df['total'].sum() if not cart_df.empty else 0
-                st.markdown(f"### Total: ₹{grand_total:,.0f}")
+                total = df['total'].sum()
+                st.markdown(f"### Total: ₹{total:,.0f}")
+                paid = st.number_input("Paid", value=0.0)
                 
-                paid = st.number_input("Paid Amount", value=0.0)
-                if st.button("✅ FINALIZE SALE", type="primary"):
-                    conn = get_db()
+                if st.button("Confirm Sale", type="primary"):
                     inv_id = f"INV-{int(time.time())}"
-                    due = grand_total - paid
+                    due = total - paid
                     
-                    conn.execute("INSERT INTO transactions (invoice_id, customer_phone, date, type, total_amount, paid_amount, due_amount) VALUES (?,?,?,?,?,?,?)",
-                                 (inv_id, sel_phone, datetime.date.today(), 'SALE', grand_total, paid, due))
+                    db.run_query("INSERT INTO transactions (invoice_id, customer_phone, date, type, total_amount, paid_amount, due_amount) VALUES (?,?,?,?,?,?,?)",
+                                 (inv_id, sel_cust['phone'], str(datetime.date.today()), 'SALE', total, paid, due))
                     
                     for item in st.session_state.cart:
-                        conn.execute("INSERT INTO invoice_items (invoice_id, product_name, quantity, unit_price, total_price) VALUES (?,?,?,?,?)",
+                        db.run_query("INSERT INTO invoice_items (invoice_id, product_name, quantity, unit_price, total_price) VALUES (?,?,?,?,?)",
                                      (inv_id, item['name'], item['qty'], item['price'], item['total']))
-                        conn.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (item['qty'], item['id']))
                     
-                    conn.commit()
-                    conn.close()
-                    
-                    # Generate PDF
-                    cust_data = cust_df[cust_df['phone'] == sel_phone].iloc[0]
-                    tx_data = {'invoice_id': inv_id, 'date': datetime.date.today(), 'total_amount': grand_total, 'paid_amount': paid, 'due_amount': due}
-                    st.session_state.last_pdf = generate_invoice_pdf(tx_data, st.session_state.cart, cust_data)
+                    st.session_state.pdf = generate_invoice_pdf({'invoice_id': inv_id, 'date': str(datetime.date.today()), 'total_amount': total, 'paid_amount': paid, 'due_amount': due}, st.session_state.cart, sel_cust)
                     st.session_state.cart = []
                     st.rerun()
-
-            if 'last_pdf' in st.session_state:
-                st.success("Sale Saved!")
-                st.download_button("🖨️ Download Bill PDF", st.session_state.last_pdf, "bill.pdf", "application/pdf")
+            
+            if 'pdf' in st.session_state:
+                st.success("Done!")
+                st.download_button("Download Bill", st.session_state.pdf, "bill.pdf", "application/pdf")
 
     # --- LEDGER ---
     elif menu == "Ledger":
         st.title("📖 Ledger")
-        conn = get_db()
-        cust_df = pd.read_sql("SELECT * FROM customers", conn)
+        custs = db.run_query("SELECT * FROM customers", fetch=True)
         
-        sel_cust_str = st.selectbox("Search Customer", cust_df['name'] + " (" + cust_df['phone'] + ")")
-        phone = sel_cust_str.split('(')[-1].strip(')')
-        
-        txs = pd.read_sql(f"SELECT * FROM transactions WHERE customer_phone='{phone}' ORDER BY created_at DESC", conn)
-        
-        if not txs.empty:
-            bal = txs[txs['type']=='SALE']['total_amount'].sum() - txs['paid_amount'].sum()
-            st.metric("Outstanding Due", f"₹{bal:,.0f}")
+        # SAFETY CHECK FOR EMPTY DB
+        if not custs:
+            st.warning("No customers found. Go to 'Customers' tab to register one.")
+            st.stop() # Prevents the crash
             
-            st.dataframe(txs[['date', 'invoice_id', 'type', 'total_amount', 'paid_amount', 'due_amount']], use_container_width=True)
-            
-            st.markdown("### Reprint Invoice")
-            sale_ids = txs[txs['type']=='SALE']['invoice_id']
-            if not sale_ids.empty:
-                sel_inv = st.selectbox("Select Invoice", sale_ids)
-                if st.button("Download PDF"):
-                    items = pd.read_sql(f"SELECT * FROM invoice_items WHERE invoice_id='{sel_inv}'", conn)
-                    inv_d = txs[txs['invoice_id']==sel_inv].iloc[0]
-                    c_d = cust_df[cust_df['phone']==phone].iloc[0]
-                    # Convert items df to list of dicts for PDF function
-                    items_list = items.to_dict('records')
-                    pdf = generate_invoice_pdf(inv_d, items_list, c_d)
-                    st.download_button("Download", pdf, f"{sel_inv}.pdf", "application/pdf")
+        c_idx = st.selectbox("Customer", range(len(custs)), format_func=lambda x: custs[x]['name'])
+        sel_cust = custs[c_idx]
+        
+        txs = db.run_query("SELECT * FROM transactions WHERE customer_phone=? ORDER BY created_at DESC", (sel_cust['phone'],), fetch=True)
+        if txs:
+            st.dataframe(pd.DataFrame(txs)[['date', 'invoice_id', 'total_amount', 'paid_amount', 'due_amount']])
         else:
             st.info("No history.")
 
