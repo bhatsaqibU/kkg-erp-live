@@ -29,11 +29,10 @@ META = {
     "email": "support@kkg-agri.com",
     "gst": "01AAAAA0000A1Z5",
     "currency": "₹",
-    "version": "v31.0 (Industrial Standard)"
+    "version": "v32.0 (Industrial Standard)"
 }
 
 # Role-Based Access Control (RBAC) Map
-# In a real phase 2 deployment, this table lives in PostgreSQL
 USERS = {
     "admin": {
         "hash": "kkg@123", 
@@ -364,29 +363,26 @@ def log_security_event(action, details):
 def get_live_financials():
     """
     Fetches financial health metrics in real-time.
-    Includes safeguards against NoneTypes and IndexErrors.
+    Uses COALESCE to ensure NO NULL values return (Preventing the '0' bug).
     """
     today = datetime.date.today().isoformat()
     
-    # 1. Total Revenue Today
-    sales_res = db.run("SELECT SUM(total_amount) as v FROM transactions WHERE date=? AND type='SALE'", (today,), fetch=True)
-    revenue = sales_res[0]['v'] if sales_res and sales_res[0]['v'] else 0
+    # 1. Total Revenue Today (Using COALESCE to fix 'None' issues)
+    sales_res = db.run(f"SELECT COALESCE(SUM(total_amount), 0) as v FROM transactions WHERE date=? AND type='SALE'", (today,), fetch=True)
+    revenue = sales_res[0]['v'] if sales_res else 0
     
     # 2. Total Expenses Today
-    exp_res = db.run("SELECT SUM(amount) as v FROM expenses WHERE date=?", (today,), fetch=True)
-    expenses = exp_res[0]['v'] if exp_res and exp_res[0]['v'] else 0
+    exp_res = db.run(f"SELECT COALESCE(SUM(amount), 0) as v FROM expenses WHERE date=?", (today,), fetch=True)
+    expenses = exp_res[0]['v'] if exp_res else 0
     
     # 3. Total Market Debt (Receivables)
-    # Calculated as (Total Sales ever) - (Total Payments ever)
-    debt_res_s = db.run("SELECT SUM(total_amount) as v FROM transactions WHERE type='SALE'", fetch=True)
-    debt_res_p = db.run("SELECT SUM(paid_amount) as v FROM transactions", fetch=True)
+    debt_res_s = db.run("SELECT COALESCE(SUM(total_amount), 0) as v FROM transactions WHERE type='SALE'", fetch=True)
+    debt_res_p = db.run("SELECT COALESCE(SUM(paid_amount), 0) as v FROM transactions", fetch=True)
     
-    total_sales = debt_res_s[0]['v'] if debt_res_s and debt_res_s[0]['v'] else 0
-    total_paid = debt_res_p[0]['v'] if debt_res_p and debt_res_p[0]['v'] else 0
+    total_sales = debt_res_s[0]['v'] if debt_res_s else 0
+    total_paid = debt_res_p[0]['v'] if debt_res_p else 0
     debt = total_sales - total_paid
     
-    # 4. Net Profit Estimate (Revenue - Expenses)
-    # In Phase 2, we can add COGS here
     net_profit = revenue - expenses
     
     return revenue, expenses, debt, net_profit
@@ -749,18 +745,24 @@ def main():
                     st.success("Product Added")
         
         prods, _ = get_master_data()
+        
+        # INDUSTRIAL FIX FOR KEYERROR CRASH
         if prods:
             df = pd.DataFrame(prods)
-            st.dataframe(df[['id', 'name', 'category', 'price', 'cost_price', 'stock']], use_container_width=True)
-            
-            if st.session_state.role == "CEO":
-                with st.expander("danger Zone"):
-                    d_id = st.number_input("Enter ID to Delete", 0)
-                    if st.button("Delete Product", type="secondary") and d_id:
-                        db.run("DELETE FROM products WHERE id=?", (d_id,))
-                        log_security_event("DELETE", f"Product ID {d_id} removed")
-                        force_system_refresh()
-                        st.rerun()
+            # Ensure columns exist before displaying
+            if not df.empty:
+                st.dataframe(df[['id', 'name', 'category', 'price', 'cost_price', 'stock']], use_container_width=True)
+                
+                if st.session_state.role == "CEO":
+                    with st.expander("danger Zone"):
+                        d_id = st.number_input("Enter ID to Delete", 0)
+                        if st.button("Delete Product", type="secondary") and d_id:
+                            db.run("DELETE FROM products WHERE id=?", (d_id,))
+                            log_security_event("DELETE", f"Product ID {d_id} removed")
+                            force_system_refresh()
+                            st.rerun()
+        else:
+            st.info("Inventory is empty. Add products to see the table.")
 
     # --- 4. CUSTOMER MANAGEMENT ---
     elif choice == "Customers":
