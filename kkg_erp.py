@@ -4,23 +4,29 @@ import datetime
 import time
 from fpdf import FPDF
 import os
+import sqlite3
 
 # ==========================================
-# 1. DATABASE ADAPTER (Hybrid)
+# 1. DATABASE ADAPTER (Crash-Proof Hybrid)
 # ==========================================
 class DBHandler:
     def __init__(self):
-        # Check if running on Cloud
-        if "postgres" in st.secrets:
-            self.type = "POSTGRES"
-            import psycopg2
-            self.lib = psycopg2
-            self.dsn = st.secrets["postgres"]["url"]
-        else:
-            self.type = "SQLITE"
-            import sqlite3
-            self.lib = sqlite3
-            self.db_file = "kkg_database.sqlite"
+        # Default to Local Mode (SQLite)
+        self.type = "SQLITE"
+        self.lib = sqlite3
+        self.db_file = "kkg_database.sqlite"
+
+        # Try to switch to Cloud Mode (Postgres) if secrets exist
+        try:
+            # We access st.secrets inside a try block to prevent crashing in Codespaces
+            if "postgres" in st.secrets:
+                self.type = "POSTGRES"
+                import psycopg2
+                self.lib = psycopg2
+                self.dsn = st.secrets["postgres"]["url"]
+        except (FileNotFoundError, KeyError, Exception):
+            # If no secrets found, silently stay in SQLite mode (Local)
+            pass
 
     def get_conn(self):
         try:
@@ -34,6 +40,8 @@ class DBHandler:
 
     def run_query(self, query, params=None, fetch=False):
         conn = self.get_conn()
+        
+        # Postgres uses %s, SQLite uses ?
         if self.type == "POSTGRES":
             query = query.replace('?', '%s')
             
@@ -59,7 +67,7 @@ class DBHandler:
                 conn.close()
                 return True
         except Exception as e:
-            conn.close()
+            if conn: conn.close()
             st.error(f"DB Query Error: {e}")
             return [] if fetch else False
 
@@ -87,14 +95,42 @@ init_db_tables()
 st.set_page_config(page_title="KKG ERP", page_icon="🚜", layout="wide")
 BUSINESS_INFO = {"name": "KISAN KHIDMAT GHAR", "address": "Chakoora, Pulwama, J&K", "phone": "+91 9906XXXXXX"}
 
+# Industrial UI CSS
 st.markdown("""
     <style>
+    /* Global Reset */
     .stApp { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+    
+    /* Sidebar */
     [data-testid="stSidebar"] { background-color: #0f172a; border-right: 1px solid #1e293b; }
     [data-testid="stSidebar"] * { color: #f8fafc !important; }
-    div[data-testid="stMetric"] { background-color: white; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; }
-    [data-testid="stMetricValue"] { color: #0f172a !important; font-weight: 700; }
-    .stButton button { background-color: #2563eb; color: white !important; font-weight: 600; border-radius: 8px; }
+    
+    /* Metrics */
+    div[data-testid="stMetric"] { 
+        background-color: white !important; 
+        border: 1px solid #e2e8f0; 
+        padding: 20px !important; 
+        border-radius: 12px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    [data-testid="stMetricValue"] { color: #0f172a !important; font-weight: 800 !important; }
+    [data-testid="stMetricLabel"] { color: #64748b !important; font-weight: 600 !important; }
+    
+    /* Tables */
+    [data-testid="stDataFrame"] { background-color: white !important; border-radius: 10px; border: 1px solid #e2e8f0; }
+    
+    /* Buttons */
+    .stButton button { 
+        background-color: #2563eb; 
+        color: white !important; 
+        font-weight: 600; 
+        border-radius: 8px; 
+        border: none;
+    }
+    .stButton button:hover { background-color: #1d4ed8; }
+    
+    /* Inputs */
+    input, select { background-color: white !important; color: #0f172a !important; border-radius: 6px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -220,7 +256,9 @@ def main():
                 c1, c2, c3 = st.columns([2,2,1])
                 c1.write(r['name']); c2.write(r['phone'])
                 if c3.button("Delete", key=f"dc_{r['phone']}"):
-                    db.run_query("DELETE FROM customers WHERE phone=?", (r['phone'],)); st.rerun()
+                    tx_check = db.run_query("SELECT count(*) as c FROM transactions WHERE customer_phone=?", (r['phone'],), fetch=True)
+                    if tx_check[0]['c'] > 0: st.error("Cannot delete: Has history")
+                    else: db.run_query("DELETE FROM customers WHERE phone=?", (r['phone'],)); st.rerun()
         else:
             st.warning("No customers found.")
 
@@ -234,22 +272,24 @@ def main():
         
         c1, c2 = st.columns([1.5, 1])
         with c1:
-            # Dropdowns
-            c_idx = st.selectbox("Customer", range(len(custs)), format_func=lambda x: f"{custs[x]['name']} ({custs[x]['phone']})")
-            sel_cust = custs[c_idx]
+            sel_c_idx = st.selectbox("Customer", range(len(custs)), format_func=lambda x: f"{custs[x]['name']} ({custs[x]['phone']})")
+            sel_cust = custs[sel_c_idx]
             
-            p_idx = st.selectbox("Product", range(len(prods)), format_func=lambda x: f"{prods[x]['name']} (₹{prods[x]['price']})")
-            sel_prod = prods[p_idx]
+            sel_p_idx = st.selectbox("Product", range(len(prods)), format_func=lambda x: f"{prods[x]['name']} (₹{prods[x]['price']} | Stock: {prods[x]['stock']})")
+            sel_prod = prods[sel_p_idx]
             
             qty = st.number_input("Qty", min_value=1, value=1)
             
             if 'cart' not in st.session_state: st.session_state.cart = []
             
             if st.button("Add"):
-                item = dict(sel_prod)
-                item['qty'] = qty
-                item['total'] = qty * sel_prod['price']
-                st.session_state.cart.append(item)
+                cart_qty = sum(item['qty'] for item in st.session_state.cart if item['id'] == sel_prod['id'])
+                if (cart_qty + qty) > sel_prod['stock']: st.error("Low Stock")
+                else:
+                    item = dict(sel_prod)
+                    item['qty'] = qty
+                    item['total'] = qty * sel_prod['price']
+                    st.session_state.cart.append(item)
         
         with c2:
             st.subheader("Cart")
@@ -271,6 +311,7 @@ def main():
                     for item in st.session_state.cart:
                         db.run_query("INSERT INTO invoice_items (invoice_id, product_name, quantity, unit_price, total_price) VALUES (?,?,?,?,?)",
                                      (inv_id, item['name'], item['qty'], item['price'], item['total']))
+                        db.run_query("UPDATE products SET stock = stock - ? WHERE id = ?", (item['qty'], item['id']))
                     
                     st.session_state.pdf = generate_invoice_pdf({'invoice_id': inv_id, 'date': str(datetime.date.today()), 'total_amount': total, 'paid_amount': paid, 'due_amount': due}, st.session_state.cart, sel_cust)
                     st.session_state.cart = []
@@ -284,11 +325,9 @@ def main():
     elif menu == "Ledger":
         st.title("📖 Ledger")
         custs = db.run_query("SELECT * FROM customers", fetch=True)
-        
-        # SAFETY CHECK FOR EMPTY DB
         if not custs:
-            st.warning("No customers found. Go to 'Customers' tab to register one.")
-            st.stop() # Prevents the crash
+            st.warning("No customers found.")
+            st.stop()
             
         c_idx = st.selectbox("Customer", range(len(custs)), format_func=lambda x: custs[x]['name'])
         sel_cust = custs[c_idx]
