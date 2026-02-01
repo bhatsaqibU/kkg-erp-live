@@ -8,25 +8,25 @@ import os
 import hashlib
 
 # ==========================================
-# 1. ENTERPRISE CONFIGURATION & CONSTANTS
+# 1. ENTERPRISE CONFIGURATION
 # ==========================================
 st.set_page_config(
-    page_title="KKG Enterprise ERP",
+    page_title="KKG ERP",
     page_icon="🚜",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-BUSINESS_INFO = {
+# Business Constants
+BUSINESS_META = {
     "name": "KISAN KHIDMAT GHAR",
     "address": "Chakoora, Pulwama, J&K",
     "phone": "+91 9622749245",
-    "email": "contact@kkg.com",
-    "gst": "01AAAAA0000A1Z5",
+    "gst": "01AAAAA0000A1Z5", # Placeholder
     "currency": "₹"
 }
 
-# Role-Based Access Control (RBAC)
+# Credentials (In a real V2 phase, these move to DB)
 USERS = {
     "admin": {"pass": "kkg@123", "role": "admin", "name": "Owner"},
     "staff": {"pass": "staff1", "role": "staff", "name": "Counter Staff"}
@@ -35,698 +35,554 @@ USERS = {
 DB_FILE = "kkg_database.sqlite"
 
 # ==========================================
-# 2. IMMERSIVE UI ENGINE (Advanced CSS)
+# 2. IMMERSIVE UI ENGINE (CSS)
 # ==========================================
-def inject_custom_css():
+def inject_industrial_css():
     st.markdown("""
         <style>
-        /* IMPORT FONTS */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         
-        /* GLOBAL RESET */
-        .stApp {
-            background-color: #f1f5f9;
-            font-family: 'Inter', sans-serif;
-        }
+        /* BASE THEME */
+        .stApp { background-color: #f1f5f9; font-family: 'Inter', sans-serif; }
         
-        /* SIDEBAR STYLING */
+        /* SIDEBAR (Midnight Navy) */
         [data-testid="stSidebar"] {
             background-color: #0f172a;
             border-right: 1px solid #1e293b;
         }
         [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
-            color: #f8fafc !important;
+            color: #f1f5f9 !important;
         }
         
-        /* LOGIN CONTAINER */
-        .login-container {
-            max-width: 450px;
-            margin: 80px auto;
-            padding: 40px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            text-align: center;
-            border: 1px solid #e2e8f0;
-        }
-        
-        /* METRIC CARDS (Glassmorphism + Hover) */
+        /* METRIC CARDS (Glassmorphism) */
         div[data-testid="stMetric"] {
-            background-color: white;
+            background: white !important;
             border: 1px solid #e2e8f0;
-            padding: 24px;
-            border-radius: 16px;
+            padding: 20px !important;
+            border-radius: 12px !important;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
+            transition: transform 0.2s;
         }
         div[data-testid="stMetric"]:hover {
-            transform: translateY(-5px);
+            transform: translateY(-2px);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
             border-color: #3b82f6;
         }
-        [data-testid="stMetricLabel"] {
-            color: #64748b;
-            font-size: 0.875rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        [data-testid="stMetricValue"] {
-            color: #0f172a;
-            font-size: 2rem;
-            font-weight: 800;
-        }
+        [data-testid="stMetricLabel"] { color: #64748b; font-weight: 600; font-size: 0.9rem; }
+        [data-testid="stMetricValue"] { color: #0f172a; font-weight: 800; font-size: 1.8rem; }
         
-        /* CUSTOM BUTTONS (Gradient) */
+        /* PRIMARY BUTTONS */
         .stButton button {
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
             color: white !important;
             font-weight: 600;
-            padding: 0.75rem 1.5rem;
             border-radius: 8px;
             border: none;
-            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+            padding: 0.6rem 1rem;
             width: 100%;
-            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
         }
-        .stButton button:hover {
-            background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-            box-shadow: 0 6px 10px -1px rgba(37, 99, 235, 0.3);
-            transform: translateY(-1px);
-        }
+        .stButton button:hover { background: #1e40af; }
         
-        /* SECONDARY BUTTON (Danger/Delete) */
+        /* DANGER/DELETE BUTTONS */
         button[kind="secondary"] {
             background: white !important;
-            color: #ef4444 !important;
+            color: #dc2626 !important;
             border: 1px solid #fecaca !important;
-            box-shadow: none !important;
-        }
-        button[kind="secondary"]:hover {
-            background-color: #fee2e2 !important;
-            border-color: #ef4444 !important;
         }
         
-        /* DATA TABLES */
+        /* TABLES */
         [data-testid="stDataFrame"] {
             background: white;
-            padding: 1.5rem;
             border-radius: 12px;
             border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            padding: 10px;
         }
         
-        /* INPUT FIELDS */
-        .stTextInput input, .stNumberInput input, .stSelectbox select, .stDateInput input {
+        /* INPUTS */
+        input, select {
             border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            padding: 0.6rem;
-            color: #1e293b;
-            background-color: #f8fafc;
-        }
-        .stTextInput input:focus, .stNumberInput input:focus {
-            border-color: #3b82f6;
-            background-color: white;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-        
-        /* HEADERS */
-        h1, h2, h3 {
+            border-radius: 6px;
+            padding: 8px;
             color: #0f172a;
-            font-weight: 800;
-            letter-spacing: -0.025em;
-        }
-        
-        /* ALERTS */
-        div[data-baseweb="notification"] {
-            border-radius: 8px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
         </style>
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. ROBUST DATABASE ENGINE (Hybrid)
+# 3. DATABASE MANAGER CLASS
 # ==========================================
-@st.cache_resource
-def get_db_connection():
-    """
-    Establishes a persistent connection to the database.
-    Supports both SQLite (Local) and Postgres (Cloud) seamlessly.
-    """
-    # 1. Try Cloud (Postgres)
-    if hasattr(st, "secrets") and "postgres" in st.secrets:
-        try:
-            import psycopg2
-            conn = psycopg2.connect(st.secrets["postgres"]["url"])
-            return "POSTGRES", conn
-        except Exception as e:
-            # Silent failover to local if cloud fails
-            pass
-    
-    # 2. Fallback to Local (SQLite)
-    try:
-        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        return "SQLITE", conn
-    except Exception as e:
-        return "ERROR", None
+class DatabaseManager:
+    def __init__(self):
+        self.db_file = DB_FILE
+        self.init_schema()
 
-def run_query(query, params=None, fetch=False):
-    """
-    Executes a query with automatic error recovery and transaction management.
-    """
-    db_type, conn = get_db_connection()
-    
-    if not conn:
-        return [] if fetch else False
-
-    # Postgres Parameter Substitution Adjustment
-    if db_type == "POSTGRES":
-        query = query.replace('?', '%s')
-        # Auto-reconnect if connection dropped
-        if conn.closed:
-            st.cache_resource.clear()
-            db_type, conn = get_db_connection()
-
-    try:
-        cur = conn.cursor()
+    def get_connection(self):
+        # Hybrid Check: Cloud vs Local
+        if hasattr(st, "secrets") and "postgres" in st.secrets:
+            try:
+                import psycopg2
+                return "POSTGRES", psycopg2.connect(st.secrets["postgres"]["url"])
+            except: pass # Fallback
         
-        # Enable dictionary access for SQLite rows
-        if db_type == "SQLITE":
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-        
-        cur.execute(query, params or ())
-        
-        if fetch:
-            if db_type == "SQLITE":
-                res = [dict(row) for row in cur.fetchall()]
-            else:
-                cols = [desc[0] for desc in cur.description]
-                res = [dict(zip(cols, row)) for row in cur.fetchall()]
-            cur.close()
-            return res
-        else:
-            conn.commit()
-            cur.close()
-            return True
+        return "SQLITE", sqlite3.connect(self.db_file, check_same_thread=False)
 
-    except Exception as e:
-        # Emergency Rollback for Postgres
+    def run(self, query, params=None, fetch=False):
+        db_type, conn = self.get_connection()
+        if not conn: return [] if fetch else False
+
+        # Postgres Parameter Fix
         if db_type == "POSTGRES":
-            conn.rollback()
-        # Log error internally
-        print(f"Database Error: {e}") 
-        return [] if fetch else False
+            query = query.replace('?', '%s')
+
+        try:
+            cur = conn.cursor()
+            if db_type == "SQLITE": conn.row_factory = sqlite3.Row
+            
+            cur.execute(query, params or ())
+            
+            if fetch:
+                if db_type == "SQLITE":
+                    res = [dict(row) for row in cur.fetchall()]
+                else:
+                    cols = [desc[0] for desc in cur.description]
+                    res = [dict(zip(cols, row)) for row in cur.fetchall()]
+                conn.close()
+                return res
+            else:
+                conn.commit()
+                conn.close()
+                return True
+        except Exception as e:
+            if db_type == "POSTGRES": conn.rollback()
+            # st.error(f"DB Error: {e}") # Uncomment for debugging
+            return [] if fetch else False
+
+    def init_schema(self):
+        """Ensures all 7 industrial tables exist."""
+        db_type, _ = self.get_connection()
+        if not db_type: return
+        
+        pk = "SERIAL PRIMARY KEY" if db_type == "POSTGRES" else "INTEGER PRIMARY KEY AUTOINCREMENT"
+        
+        tables = [
+            f"CREATE TABLE IF NOT EXISTS products (id {pk}, name TEXT, category TEXT, price REAL, cost_price REAL DEFAULT 0, stock INTEGER, supplier_id INTEGER)",
+            f"CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY, name TEXT, address TEXT, joined_date TEXT, credit_limit REAL DEFAULT 50000)",
+            f"CREATE TABLE IF NOT EXISTS suppliers (id {pk}, name TEXT, phone TEXT, address TEXT)",
+            f"CREATE TABLE IF NOT EXISTS transactions (invoice_id TEXT PRIMARY KEY, customer_phone TEXT, date TEXT, type TEXT, total_amount REAL, paid_amount REAL, due_amount REAL, payment_mode TEXT, created_by TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+            f"CREATE TABLE IF NOT EXISTS invoice_items (id {pk}, invoice_id TEXT, product_name TEXT, quantity INTEGER, unit_price REAL, cost_price REAL, total_price REAL)",
+            f"CREATE TABLE IF NOT EXISTS expenses (id {pk}, date TEXT, category TEXT, amount REAL, note TEXT, added_by TEXT)",
+            f"CREATE TABLE IF NOT EXISTS system_logs (id {pk}, timestamp TEXT, username TEXT, action TEXT, details TEXT)"
+        ]
+        for t in tables: self.run(t)
+
+# Initialize DB Engine
+db = DatabaseManager()
 
 # ==========================================
-# 4. SYSTEM INITIALIZATION & AUDIT
+# 4. BUSINESS LOGIC & AUDIT
 # ==========================================
-def init_system():
-    """Creates tables if they don't exist. Ensures Schema Integrity."""
-    db_type, _ = get_db_connection()
-    if not db_type or db_type == "ERROR": return
-
-    pk = "SERIAL PRIMARY KEY" if db_type == "POSTGRES" else "INTEGER PRIMARY KEY AUTOINCREMENT"
-    
-    # Comprehensive Schema for Real Business
-    tables = [
-        # Products: Now includes Cost Price for Profit Calculation
-        f"CREATE TABLE IF NOT EXISTS products (id {pk}, name TEXT, category TEXT, price REAL, cost_price REAL DEFAULT 0, stock INTEGER, low_stock_threshold INTEGER DEFAULT 5, supplier_id INTEGER)",
-        
-        # Customers: Includes Credit Limit
-        f"CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY, name TEXT, address TEXT, joined_date TEXT, credit_limit REAL DEFAULT 50000, current_balance REAL DEFAULT 0)",
-        
-        # Suppliers: Track sources
-        f"CREATE TABLE IF NOT EXISTS suppliers (id {pk}, name TEXT, phone TEXT, address TEXT, balance REAL DEFAULT 0)",
-        
-        # Transactions: Master Ledger
-        f"CREATE TABLE IF NOT EXISTS transactions (invoice_id TEXT PRIMARY KEY, customer_phone TEXT, date TEXT, type TEXT, total_amount REAL, paid_amount REAL, due_amount REAL, payment_mode TEXT, notes TEXT, created_by TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
-        
-        # Invoice Items: Detail Lines
-        f"CREATE TABLE IF NOT EXISTS invoice_items (id {pk}, invoice_id TEXT, product_name TEXT, quantity INTEGER, unit_price REAL, cost_price REAL, total_price REAL)",
-        
-        # Expenses: For Net Profit Calculation
-        f"CREATE TABLE IF NOT EXISTS expenses (id {pk}, date TEXT, category TEXT, amount REAL, note TEXT, added_by TEXT)",
-        
-        # System Logs: Audit Trail
-        f"CREATE TABLE IF NOT EXISTS system_logs (id {pk}, timestamp TEXT, username TEXT, action TEXT, details TEXT)"
-    ]
-    
-    for q in tables:
-        run_query(q)
-
 def log_audit(action, details):
-    """Records sensitive actions to the database."""
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     user = st.session_state.get('username', 'system')
-    run_query("INSERT INTO system_logs (timestamp, username, action, details) VALUES (?,?,?,?)", (ts, user, action, details))
+    db.run("INSERT INTO system_logs (timestamp, username, action, details) VALUES (?,?,?,?)", 
+           (ts, user, action, details))
 
-# Run initialization once
-init_system()
-
-# ==========================================
-# 5. DATA CACHING & LOGIC LAYER
-# ==========================================
-@st.cache_data(ttl=60)
-def get_financial_summary():
+# --- LIVE FINANCIALS (NO CACHE) ---
+def get_live_metrics():
     today = datetime.date.today().isoformat()
     
-    # Revenue Today
-    sales = run_query(f"SELECT SUM(total_amount) as v FROM transactions WHERE date='{today}' AND type='SALE'", fetch=True)
-    sales_val = sales[0]['v'] or 0
+    # 1. Sales
+    sales = db.run("SELECT SUM(total_amount) as v FROM transactions WHERE date=? AND type='SALE'", (today,), fetch=True)
+    sales_val = sales[0]['v'] if sales and sales[0]['v'] else 0
     
-    # Expenses Today
-    exps = run_query(f"SELECT SUM(amount) as v FROM expenses WHERE date='{today}'", fetch=True)
-    exp_val = exps[0]['v'] or 0
+    # 2. Expenses
+    exps = db.run("SELECT SUM(amount) as v FROM expenses WHERE date=?", (today,), fetch=True)
+    exp_val = exps[0]['v'] if exps and exps[0]['v'] else 0
     
-    # Total Market Credit (Receivables)
-    total_sales = run_query("SELECT SUM(total_amount) as v FROM transactions WHERE type='SALE'", fetch=True)[0]['v'] or 0
-    total_paid = run_query("SELECT SUM(paid_amount) as v FROM transactions", fetch=True)[0]['v'] or 0
-    receivables = total_sales - total_paid
+    # 3. Market Debt
+    tot_sales = db.run("SELECT SUM(total_amount) as v FROM transactions WHERE type='SALE'", fetch=True)
+    tot_paid = db.run("SELECT SUM(paid_amount) as v FROM transactions", fetch=True)
+    debt = (tot_sales[0]['v'] or 0) - (tot_paid[0]['v'] or 0)
     
-    # Net Profit Estimate (Sales Margin - Expenses)
-    # This queries invoice items to get (Unit Price - Cost Price) * Qty
-    # Simplified for speed: Gross Margin - Expenses
-    gross_margin = run_query(f"SELECT SUM(total_price - (cost_price * quantity)) as m FROM invoice_items JOIN transactions ON invoice_items.invoice_id = transactions.invoice_id WHERE transactions.date='{today}'", fetch=True)
-    margin_val = gross_margin[0]['m'] or 0
-    net_profit = margin_val - exp_val
-    
-    return sales_val, exp_val, receivables, net_profit
+    return sales_val, exp_val, debt
 
+# --- STATIC DATA (CACHED FOR SPEED) ---
 @st.cache_data(ttl=300)
-def get_master_data():
-    """Loads heavy lists into RAM for instant dropdowns."""
-    prods = run_query("SELECT * FROM products ORDER BY name", fetch=True)
-    custs = run_query("SELECT * FROM customers ORDER BY name", fetch=True)
-    suppliers = run_query("SELECT * FROM suppliers ORDER BY name", fetch=True)
-    return prods, custs, suppliers
+def get_master_lists():
+    prods = db.run("SELECT * FROM products ORDER BY name", fetch=True)
+    custs = db.run("SELECT * FROM customers ORDER BY name", fetch=True)
+    sups = db.run("SELECT * FROM suppliers ORDER BY name", fetch=True)
+    return prods, custs, sups
 
-def force_refresh():
+def refresh_app():
     st.cache_data.clear()
     st.rerun()
 
 # ==========================================
-# 6. PROFESSIONAL PDF ENGINE
+# 5. PROFESSIONAL PDF CLASS
 # ==========================================
 class PDF(FPDF):
     def header(self):
-        # Company Logo/Header Area
-        self.set_font('Arial', 'B', 24)
-        self.set_text_color(15, 23, 42) # Dark Navy
-        self.cell(0, 10, BUSINESS_INFO["name"], 0, 1, 'C')
+        self.set_font('Arial', 'B', 22)
+        self.set_text_color(15, 23, 42)
+        self.cell(0, 10, BUSINESS_META["name"], 0, 1, 'C')
         
         self.set_font('Arial', '', 10)
-        self.set_text_color(100, 116, 139) # Slate Gray
-        self.cell(0, 5, BUSINESS_INFO["address"], 0, 1, 'C')
-        self.cell(0, 5, f"Helpline: {BUSINESS_INFO['phone']} | GST: {BUSINESS_INFO['gst']}", 0, 1, 'C')
-        
-        self.ln(5)
-        self.set_draw_color(226, 232, 240) # Light Gray Line
-        self.set_line_width(0.5)
-        self.line(10, 35, 200, 35)
+        self.set_text_color(100, 116, 139)
+        self.cell(0, 5, BUSINESS_META["address"], 0, 1, 'C')
+        self.cell(0, 5, f"Contact: {BUSINESS_META['phone']}", 0, 1, 'C')
         self.ln(10)
+        self.set_draw_color(200); self.line(10, 32, 200, 32); self.ln(5)
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
-        self.set_text_color(148, 163, 184)
-        self.cell(0, 10, f'Computer Generated Invoice | Page {self.page_no()}', 0, 0, 'C')
+        self.cell(0, 10, 'Software by KKG ERP System', 0, 0, 'C')
 
-def generate_invoice_pdf(tx_data, items, cust_data):
+def create_invoice(tx, items, cust):
     pdf = PDF()
     pdf.add_page()
     
-    # Title Section
-    pdf.set_font('Arial', 'B', 16)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(120, 10, "TAX INVOICE", 0, 0)
+    # Meta
+    pdf.set_font('Arial', 'B', 14)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(130, 10, "INVOICE", 0, 0)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(60, 10, f"Date: {tx['date']}", 0, 1, 'R')
     
-    pdf.set_font('Arial', 'B', 10)
-    pdf.set_text_color(100, 116, 139)
-    pdf.cell(70, 10, f"#{tx_data['invoice_id']}", 0, 1, 'R')
-    
-    # Customer Details Box
+    # Customer Box
     pdf.set_fill_color(248, 250, 252)
-    pdf.rect(10, 50, 190, 25, 'F')
-    
-    pdf.set_y(52)
+    pdf.rect(10, 45, 190, 20, 'F')
+    pdf.set_y(48); pdf.set_x(12)
+    pdf.cell(100, 5, f"To: {cust['name']}", 0, 1)
     pdf.set_x(12)
+    pdf.cell(100, 5, f"Ph: {cust['phone']}", 0, 1)
+    pdf.set_y(48); pdf.set_x(140)
+    pdf.cell(50, 5, f"Inv #: {tx['invoice_id']}", 0, 1)
+    pdf.ln(20)
+    
+    # Header
+    pdf.set_fill_color(15, 23, 42); pdf.set_text_color(255, 255, 255)
     pdf.set_font('Arial', 'B', 10)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(20, 5, "Bill To:", 0, 0)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(100, 5, f"{cust_data['name']} ({cust_data['phone']})", 0, 1)
+    pdf.cell(10, 8, "#", 1, 0, 'C', 1)
+    pdf.cell(90, 8, "Item", 1, 0, 'L', 1)
+    pdf.cell(25, 8, "Price", 1, 0, 'R', 1)
+    pdf.cell(20, 8, "Qty", 1, 0, 'C', 1)
+    pdf.cell(45, 8, "Total", 1, 1, 'R', 1)
+    pdf.ln(8)
     
-    pdf.set_x(12)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(20, 5, "Address:", 0, 0)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(100, 5, f"{cust_data['address']}", 0, 1)
-    
-    pdf.set_y(52)
-    pdf.set_x(140)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(20, 5, "Date:", 0, 0)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(30, 5, f"{tx_data['date']}", 0, 1)
-    
-    pdf.ln(25)
-    
-    # Table Header
-    pdf.set_fill_color(15, 23, 42) # Dark Header
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(10, 10, "#", 1, 0, 'C', 1)
-    pdf.cell(90, 10, "Product Description", 1, 0, 'L', 1)
-    pdf.cell(30, 10, "Rate", 1, 0, 'R', 1)
-    pdf.cell(20, 10, "Qty", 1, 0, 'C', 1)
-    pdf.cell(40, 10, "Total", 1, 1, 'R', 1)
-    pdf.ln(10)
-    
-    # Table Rows
-    pdf.set_text_color(15, 23, 42)
-    pdf.set_font('Arial', '', 10)
-    
-    for idx, item in enumerate(items):
-        name = item.get('product_name') or item.get('name')
-        price = float(item.get('unit_price') or item.get('price') or 0)
-        qty = int(item.get('quantity') or item.get('qty') or 0)
-        total = float(item.get('total_price') or item.get('total') or 0)
+    # Items
+    pdf.set_text_color(0, 0, 0); pdf.set_font('Arial', '', 10)
+    for idx, i in enumerate(items):
+        name = i.get('product_name') or i.get('name')
+        pdf.cell(10, 8, str(idx+1), 1, 0, 'C')
+        pdf.cell(90, 8, str(name)[:45], 1, 0, 'L')
+        pdf.cell(25, 8, f"{float(i.get('unit_price', i.get('price'))):.0f}", 1, 0, 'R')
+        pdf.cell(20, 8, str(i.get('quantity', i.get('qty'))), 1, 0, 'C')
+        pdf.cell(45, 8, f"{float(i.get('total_price', i.get('total'))):.0f}", 1, 1, 'R')
+        pdf.ln(8)
         
-        pdf.cell(10, 10, str(idx+1), 1, 0, 'C')
-        pdf.cell(90, 10, str(name)[:45], 1, 0, 'L')
-        pdf.cell(30, 10, f"{price:,.0f}", 1, 0, 'R')
-        pdf.cell(20, 10, str(qty), 1, 0, 'C')
-        pdf.cell(40, 10, f"{total:,.0f}", 1, 1, 'R')
-        pdf.ln(10)
-        
-    pdf.ln(5)
+    # Total
+    pdf.ln(5); pdf.set_font('Arial', 'B', 12)
+    pdf.cell(145, 10, "Total Payable", 0, 0, 'R')
+    pdf.cell(45, 10, f"Rs {tx['total_amount']:,.0f}", 0, 1, 'R')
     
-    # Totals Block
-    pdf.set_font('Arial', 'B', 11)
-    pdf.cell(140, 8, "Sub Total", 0, 0, 'R')
-    pdf.cell(50, 8, f"Rs {tx_data['total_amount']:,.0f}", 0, 1, 'R')
+    # Due Logic
+    paid = float(tx.get('paid_amount', 0))
+    due = float(tx.get('due_amount', 0))
     
-    pdf.cell(140, 8, "Paid Amount", 0, 0, 'R')
-    pdf.set_text_color(22, 163, 74) # Green
-    pdf.cell(50, 8, f"Rs {tx_data['paid_amount']:,.0f}", 0, 1, 'R')
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(145, 6, "Paid Amount", 0, 0, 'R')
+    pdf.cell(45, 6, f"{paid:,.0f}", 0, 1, 'R')
     
-    pdf.set_text_color(15, 23, 42)
-    pdf.set_font('Arial', 'B', 12)
-    
-    # Balance Highlight
-    if tx_data['due_amount'] > 0:
+    if due > 0:
         pdf.set_text_color(220, 38, 38) # Red
-    pdf.cell(140, 10, "Balance Due", 0, 0, 'R')
-    pdf.cell(50, 10, f"Rs {tx_data['due_amount']:,.0f}", 0, 1, 'R')
-    
+        pdf.set_font('Arial', 'B', 11)
+        pdf.cell(145, 10, "Balance Due", 0, 0, 'R')
+        pdf.cell(45, 10, f"Rs {due:,.0f}", 0, 1, 'R')
+        
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
-# 7. AUTHENTICATION & LOGIN
+# 6. APP MODULES (UI & LOGIC)
 # ==========================================
-def login_page():
-    inject_custom_css()
-    st.markdown("""
-        <div class="login-container">
-            <h1 style="color:#0f172a; margin-bottom:10px;">🚜 KKG ERP</h1>
-            <p style="color:#64748b; margin-bottom:30px;">Industrial Business Management System</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
+def login():
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        with st.form("login"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.form_submit_button("Secure Access"):
-                if username in USERS and USERS[username]["pass"] == password:
-                    st.session_state['logged_in'] = True
-                    st.session_state['username'] = username
-                    st.session_state['role'] = USERS[username]["role"]
-                    log_audit("LOGIN", "Session started")
+        with st.form("login_f"):
+            st.markdown("<h2 style='text-align:center;'>🔐 Secure Login</h2>", unsafe_allow_html=True)
+            u = st.text_input("Username")
+            p = st.text_input("Password", type="password")
+            if st.form_submit_button("Enter KKG ERP"):
+                if u in USERS and USERS[u]["pass"] == p:
+                    st.session_state.logged_in = True
+                    st.session_state.user = u
+                    st.session_state.role = USERS[u]["role"]
+                    log_audit("LOGIN", f"{u} accessed system")
                     st.rerun()
                 else:
-                    st.error("Invalid Credentials")
+                    st.error("Access Denied")
 
-# ==========================================
-# 8. MAIN APPLICATION
-# ==========================================
 def main():
-    inject_custom_css()
+    inject_industrial_css()
     
     if 'logged_in' not in st.session_state:
-        login_page()
+        login()
         return
 
-    # --- SIDEBAR NAV ---
+    # --- SIDEBAR ---
     st.sidebar.markdown(f"""
-        <div style='text-align: center; padding: 20px 0; border-bottom: 1px solid #1e293b; margin-bottom: 20px;'>
-            <div style='font-size: 3rem;'>🚜</div>
-            <h2 style='color: white; margin: 0;'>KKG ERP</h2>
-            <p style='color: #94a3b8; font-size: 0.8rem; margin-top:5px;'>User: {st.session_state['username'].upper()}</p>
+        <div style='text-align: center; padding: 20px 0;'>
+            <h1>🚜 KKG</h1>
+            <p style='color:#94a3b8; font-size:12px;'>v30.0 Titanium</p>
+            <div style='background:#1e293b; padding:5px; border-radius:5px; margin-top:10px;'>
+                <small>User: {st.session_state.user.upper()}</small>
+            </div>
         </div>
     """, unsafe_allow_html=True)
     
-    menu_options = ["Dashboard", "POS Terminal", "Inventory", "Customers", "Suppliers", "Expenses", "Reports"]
-    if st.session_state['role'] == "staff":
-        menu_options = ["POS Terminal", "Customers", "Inventory"] # Restricted view
+    menu = ["Dashboard", "POS Terminal", "Inventory", "Customers", "Suppliers", "Expenses", "Ledger", "Reports"]
+    if st.session_state.role == "staff":
+        menu = ["POS Terminal", "Customers", "Inventory"]
         
-    menu = st.sidebar.radio("Navigation", menu_options, label_visibility="collapsed")
+    choice = st.sidebar.radio("Main Menu", menu, label_visibility="collapsed")
     
     if st.sidebar.button("Log Out"):
-        log_audit("LOGOUT", "Session ended")
         st.session_state.clear()
         st.rerun()
 
-    # --- 1. DASHBOARD ---
-    if menu == "Dashboard":
+    # --- 1. DASHBOARD (LIVE) ---
+    if choice == "Dashboard":
         st.title("Executive Dashboard")
-        st.markdown(f"**Date:** {datetime.date.today().strftime('%d %B, %Y')}")
         
-        sales, exps, debt, profit = get_financial_summary()
+        # Real-time Metrics
+        sales, exps, debt = get_live_metrics()
+        
+        # Calculate Estimated Net Profit (Gross Margin Logic could go here)
+        # For now: Revenue - Expenses
+        profit = sales - exps
         
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Revenue Today", f"₹{sales:,.0f}")
         c2.metric("Expenses Today", f"₹{exps:,.0f}")
-        c3.metric("Net Profit (Est)", f"₹{profit:,.0f}", delta="Real Margin")
-        c4.metric("Market Debt", f"₹{debt:,.0f}", delta="Receivables", delta_color="inverse")
+        c3.metric("Net Cash Flow", f"₹{profit:,.0f}", delta="Estimated")
+        c4.metric("Market Debt", f"₹{debt:,.0f}", delta_color="inverse")
         
         st.markdown("---")
-        st.markdown("### 📊 Business Trends")
         
-        # Sales Chart
-        trend_df = pd.DataFrame(run_query("SELECT date, SUM(total_amount) as sales FROM transactions WHERE type='SALE' GROUP BY date ORDER BY date DESC LIMIT 30", fetch=True))
-        if not trend_df.empty:
-            trend_df['date'] = pd.to_datetime(trend_df['date'])
-            trend_df = trend_df.set_index('date').sort_index()
-            st.line_chart(trend_df, height=300)
-        else:
-            st.info("Insufficient data for trend analysis.")
+        # Charts Area
+        g1, g2 = st.columns(2)
+        with g1:
+            st.subheader("Recent Sales Trend")
+            trend = db.run("SELECT date, SUM(total_amount) as sales FROM transactions WHERE type='SALE' GROUP BY date ORDER BY date DESC LIMIT 14", fetch=True)
+            if trend:
+                df = pd.DataFrame(trend)
+                df['date'] = pd.to_datetime(df['date'])
+                st.line_chart(df.set_index('date'))
+            else: st.info("No sales data yet")
+            
+        with g2:
+            st.subheader("Top Products")
+            top = db.run("SELECT product_name, SUM(quantity) as qty FROM invoice_items GROUP BY product_name ORDER BY qty DESC LIMIT 5", fetch=True)
+            if top: st.bar_chart(pd.DataFrame(top).set_index('product_name'))
+            else: st.info("No product data yet")
 
-    # --- 2. POS TERMINAL ---
-    elif menu == "POS Terminal":
+    # --- 2. POS TERMINAL (FAST) ---
+    elif choice == "POS Terminal":
         st.title("🛒 Sales Terminal")
         
-        prods, custs, _ = get_master_data()
+        prods, custs, _ = get_master_lists()
         
-        if not prods or not custs:
-            st.warning("⚠️ System Empty. Please Initialize Inventory.")
-            st.stop()
-            
+        if not prods: st.warning("Inventory Empty"); st.stop()
+        
         c_map = {f"{c['name']} | {c['phone']}": c for c in custs}
         p_map = {f"{p['name']} (₹{p['price']:.0f})": p for p in prods}
         
-        col_input, col_cart = st.columns([1.2, 1])
-        
-        with col_input:
-            st.markdown("##### New Transaction")
+        c1, c2 = st.columns([1.5, 1])
+        with c1:
+            st.markdown("##### Add Item")
             with st.container():
-                with st.form("add_item_form"):
-                    c_sel = st.selectbox("Customer", list(c_map.keys()))
-                    p_sel = st.selectbox("Product", list(p_map.keys()))
+                with st.form("pos_add"):
+                    sel_c = st.selectbox("Customer", list(c_map.keys()))
+                    sel_p = st.selectbox("Product", list(p_map.keys()))
                     qty = st.number_input("Quantity", 1, 1000)
                     
                     if st.form_submit_button("Add to Bill"):
                         if 'cart' not in st.session_state: st.session_state.cart = []
-                        prod = p_map[p_sel]
+                        prod = p_map[sel_p]
                         
-                        current_cart_qty = sum(item['qty'] for item in st.session_state.cart if item['id'] == prod['id'])
-                        if (current_cart_qty + qty) > prod['stock']:
-                            st.error(f"Stock Error! Only {prod['stock']} available.")
+                        # Stock Validation
+                        in_cart = sum(i['qty'] for i in st.session_state.cart if i['id'] == prod['id'])
+                        if (in_cart + qty) > prod['stock']:
+                            st.error(f"Low Stock! Only {prod['stock']} units available.")
                         else:
-                            st.session_state.cart.append({**prod, 'qty': qty, 'total': qty * prod['price']})
-                            st.success(f"Added {prod['name']}")
+                            st.session_state.cart.append({**prod, 'qty': qty, 'total': qty*prod['price']})
+                            st.success("Added")
 
-        with col_cart:
-            st.markdown("##### Current Cart")
+        with c2:
+            st.markdown("##### Summary")
             if 'cart' in st.session_state and st.session_state.cart:
-                cart_df = pd.DataFrame(st.session_state.cart)
-                st.dataframe(cart_df[['name', 'price', 'qty', 'total']], hide_index=True, use_container_width=True)
+                df = pd.DataFrame(st.session_state.cart)
+                st.dataframe(df[['name', 'qty', 'total']], hide_index=True, use_container_width=True)
                 
-                total = cart_df['total'].sum()
-                st.markdown(f"""
-                <div style="background:#dbeafe; padding:15px; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#1e40af; font-weight:600;">Total Payable</span>
-                    <span style="color:#1e3a8a; font-size:24px; font-weight:800;">₹{total:,.0f}</span>
-                </div>
-                """, unsafe_allow_html=True)
+                total = df['total'].sum()
+                st.markdown(f"### Total: ₹{total:,.0f}")
                 
-                st.write("")
                 with st.form("checkout"):
-                    paid = st.number_input("Amount Received", min_value=0.0, value=0.0)
+                    paid = st.number_input("Amount Received", 0.0)
                     mode = st.selectbox("Payment Mode", ["Cash", "UPI", "Credit"])
                     
-                    if st.form_submit_button("✅ COMPLETE SALE"):
-                        cust = c_map[c_sel]
+                    if st.form_submit_button("✅ Finalize Sale"):
+                        cust = c_map[sel_c]
                         inv_id = f"INV-{int(time.time())}"
                         due = total - paid
                         
-                        run_query("INSERT INTO transactions (invoice_id, customer_phone, date, type, total_amount, paid_amount, due_amount, payment_mode, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
-                                  (inv_id, cust['phone'], str(datetime.date.today()), 'SALE', total, paid, due, mode, st.session_state['username']))
+                        # Atomic Transaction
+                        db.run("INSERT INTO transactions (invoice_id, customer_phone, date, type, total_amount, paid_amount, due_amount, payment_mode, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
+                               (inv_id, cust['phone'], str(datetime.date.today()), 'SALE', total, paid, due, mode, st.session_state.user))
                         
-                        for item in st.session_state.cart:
-                            run_query("INSERT INTO invoice_items (invoice_id, product_name, quantity, unit_price, cost_price, total_price) VALUES (?,?,?,?,?,?)",
-                                      (inv_id, item['name'], item['qty'], item['price'], item.get('cost_price', 0), item['total']))
-                            run_query("UPDATE products SET stock = stock - ? WHERE id = ?", (item['qty'], item['id']))
+                        for i in st.session_state.cart:
+                            db.run("INSERT INTO invoice_items (invoice_id, product_name, quantity, unit_price, cost_price, total_price) VALUES (?,?,?,?,?,?)",
+                                   (inv_id, i['name'], i['qty'], i['price'], i.get('cost_price', 0), i['total']))
+                            db.run("UPDATE products SET stock = stock - ? WHERE id = ?", (i['qty'], i['id']))
                         
-                        log_audit("SALE", f"Invoice {inv_id} created for {cust['name']}")
+                        log_audit("SALE", f"Sold {inv_id} to {cust['name']}")
                         
-                        tx_data = {'invoice_id': inv_id, 'date': str(datetime.date.today()), 'total_amount': total, 'paid_amount': paid, 'due_amount': due}
-                        st.session_state.pdf = generate_invoice_pdf(tx_data, st.session_state.cart, cust)
+                        # Generate PDF
+                        st.session_state.pdf = create_invoice({'invoice_id': inv_id, 'date': str(datetime.date.today()), 'total_amount': total, 'paid_amount': paid, 'due_amount': due}, st.session_state.cart, cust)
                         
                         st.session_state.cart = []
-                        force_refresh()
-                        st.rerun()
+                        refresh_app()
             
             if 'pdf' in st.session_state:
                 st.success("Transaction Saved!")
-                st.download_button("🖨️ Print Invoice", st.session_state.pdf, "invoice.pdf", "application/pdf")
+                st.download_button("Download Invoice", st.session_state.pdf, "invoice.pdf", "application/pdf")
 
-    # --- 3. INVENTORY MANAGEMENT ---
-    elif menu == "Inventory":
-        st.title("📦 Inventory Control")
+    # --- 3. INVENTORY (PROFIT ENGINE) ---
+    elif choice == "Inventory":
+        st.title("📦 Stock & Pricing")
         
-        with st.expander("Add New Item", expanded=False):
-            with st.form("add_prod"):
+        with st.expander("Add New Product"):
+            with st.form("add_p"):
                 c1, c2, c3, c4 = st.columns(4)
-                n = c1.text_input("Item Name")
-                cat = c2.text_input("Category")
-                sp = c3.number_input("Selling Price (₹)", 0.0)
-                stk = c4.number_input("Stock Qty", 0)
-                cp = st.number_input("Cost Price (₹) - For Profit Calc", 0.0)
+                n = c1.text_input("Name"); cat = c2.text_input("Category")
+                sp = c3.number_input("Selling Price", 0.0); cp = c4.number_input("Cost Price (for Profit)", 0.0)
+                stk = st.number_input("Stock", 0)
+                
+                # Supplier Link
+                _, _, sups = get_master_lists()
+                sup_map = {s['name']: s['id'] for s in sups} if sups else {}
+                sup_sel = st.selectbox("Supplier", ["None"] + list(sup_map.keys()))
+                sup_id = sup_map.get(sup_sel, None)
                 
                 if st.form_submit_button("Save Item"):
-                    run_query("INSERT INTO products (name, category, price, cost_price, stock) VALUES (?,?,?,?,?)", (n, cat, sp, cp, stk))
-                    force_refresh()
-                    st.success("Item Added")
-                    st.rerun()
+                    db.run("INSERT INTO products (name, category, price, cost_price, stock, supplier_id) VALUES (?,?,?,?,?,?)", 
+                           (n, cat, sp, cp, stk, sup_id))
+                    refresh_app()
         
-        df = pd.DataFrame(get_master_data()[0])
-        if not df.empty:
+        prods, _, _ = get_master_lists()
+        if prods:
+            df = pd.DataFrame(prods)
             st.dataframe(df[['name', 'category', 'price', 'cost_price', 'stock']], use_container_width=True)
             
-            if st.session_state['role'] == "admin":
-                with st.expander("Administrative Actions"):
-                    d_id = st.number_input("Enter ID to Delete", min_value=0)
-                    if st.button("Delete Product", type="secondary") and d_id > 0:
-                        run_query("DELETE FROM products WHERE id=?", (d_id,))
-                        log_audit("DELETE", f"Product ID {d_id} deleted")
-                        force_refresh()
-                        st.warning(f"Product {d_id} Deleted")
-                        st.rerun()
+            # Bulk Delete (Admin Only)
+            if st.session_state.role == "admin":
+                with st.expander("Admin Actions"):
+                    d_id = st.number_input("ID to Delete", 0)
+                    if st.button("Delete Item", type="secondary") and d_id:
+                        db.run("DELETE FROM products WHERE id=?", (d_id,))
+                        log_audit("DELETE", f"Deleted Product ID {d_id}")
+                        refresh_app()
 
-    # --- 4. CUSTOMER MANAGEMENT ---
-    elif menu == "Customers":
+    # --- 4. CUSTOMERS ---
+    elif choice == "Customers":
         st.title("👥 Customer Database")
+        with st.expander("Add Customer"):
+            with st.form("new_c"):
+                n = st.text_input("Name"); p = st.text_input("Phone"); a = st.text_input("Address")
+                clim = st.number_input("Credit Limit", 50000)
+                if st.form_submit_button("Save"):
+                    if db.run("INSERT INTO customers (phone, name, address, joined_date, credit_limit) VALUES (?,?,?,?,?)", (p, n, a, str(datetime.date.today()), clim)):
+                        refresh_app()
+                    else: st.error("Exists")
         
-        with st.expander("Register New Customer"):
-            with st.form("reg_cust"):
-                c1, c2 = st.columns(2)
-                n = c1.text_input("Full Name")
-                p = c2.text_input("Phone Number")
-                a = st.text_input("Address")
-                limit = st.number_input("Credit Limit (₹)", 50000.0)
-                
-                if st.form_submit_button("Register"):
-                    if run_query("INSERT INTO customers (phone, name, address, joined_date, credit_limit) VALUES (?,?,?,?,?)", (p, n, a, str(datetime.date.today()), limit)):
-                        force_refresh()
-                        st.success("Registered")
-                        st.rerun()
-                    else:
-                        st.error("Phone number already exists.")
-        
-        df = pd.DataFrame(get_master_data()[1])
-        if not df.empty:
-            st.dataframe(df[['name', 'phone', 'address', 'credit_limit']], use_container_width=True)
+        _, custs, _ = get_master_lists()
+        if custs: st.dataframe(pd.DataFrame(custs), use_container_width=True)
 
-    # --- 5. SUPPLIERS (NEW) ---
-    elif menu == "Suppliers":
-        st.title("🚚 Supplier Management")
-        with st.expander("Add New Supplier"):
-            with st.form("add_sup"):
-                n = st.text_input("Company Name")
-                p = st.text_input("Contact Phone")
-                a = st.text_input("Address")
-                if st.form_submit_button("Save Supplier"):
-                    run_query("INSERT INTO suppliers (name, phone, address) VALUES (?,?,?)", (n,p,a))
-                    force_refresh(); st.rerun()
-        
-        sups = run_query("SELECT * FROM suppliers", fetch=True)
-        if sups: st.dataframe(pd.DataFrame(sups), use_container_width=True)
-
-    # --- 6. EXPENSES ---
-    elif menu == "Expenses":
-        st.title("💸 Expense Tracker")
-        
+    # --- 5. EXPENSES (PROFIT KILLERS) ---
+    elif choice == "Expenses":
+        st.title("💸 Operational Expenses")
         c1, c2 = st.columns([1, 2])
         with c1:
-            st.markdown("##### Record Expense")
             with st.form("exp"):
-                cat = st.selectbox("Category", ["Rent", "Salary", "Electricity", "Tea/Refreshment", "Transport", "Other"])
-                amt = st.number_input("Amount (₹)", min_value=1.0)
-                note = st.text_input("Description")
-                if st.form_submit_button("Save Expense"):
-                    run_query("INSERT INTO expenses (date, category, amount, note, added_by) VALUES (?,?,?,?,?)",
-                              (str(datetime.date.today()), cat, amt, note, st.session_state['username']))
-                    st.success("Recorded")
-                    st.rerun()
-        
+                cat = st.selectbox("Category", ["Rent", "Salary", "Tea", "Transport", "Electricity"])
+                amt = st.number_input("Amount", 1.0); note = st.text_input("Note")
+                if st.form_submit_button("Record"):
+                    db.run("INSERT INTO expenses (date, category, amount, note, added_by) VALUES (?,?,?,?,?)", 
+                           (str(datetime.date.today()), cat, amt, note, st.session_state.user))
+                    refresh_app()
         with c2:
-            st.markdown("##### Recent Expenses")
-            exps = run_query("SELECT date, category, amount, note, added_by FROM expenses ORDER BY date DESC LIMIT 10", fetch=True)
+            exps = db.run("SELECT date, category, amount, note FROM expenses ORDER BY date DESC LIMIT 10", fetch=True)
             if exps: st.dataframe(pd.DataFrame(exps), use_container_width=True)
 
-    # --- 7. REPORTS & AUDIT ---
-    elif menu == "Reports":
+    # --- 6. SUPPLIERS (NEW) ---
+    elif choice == "Suppliers":
+        st.title("🚚 Supplier Management")
+        with st.form("new_sup"):
+            c1, c2 = st.columns(2)
+            n = c1.text_input("Company Name"); p = c2.text_input("Contact Phone")
+            a = st.text_input("Address")
+            if st.form_submit_button("Add Supplier"):
+                db.run("INSERT INTO suppliers (name, phone, address) VALUES (?,?,?)", (n,p,a))
+                refresh_app()
+        
+        _, _, sups = get_master_lists()
+        if sups: st.dataframe(pd.DataFrame(sups), use_container_width=True)
+
+    # --- 7. LEDGER ---
+    elif choice == "Ledger":
+        st.title("📖 Customer Ledger")
+        _, custs, _ = get_master_lists()
+        
+        if custs:
+            c_map = {f"{c['name']} ({c['phone']})": c for c in custs}
+            sel = st.selectbox("Select Customer", list(c_map.keys()))
+            cust = c_map[sel]
+            
+            col1, col2 = st.columns(2)
+            d1 = col1.date_input("From", datetime.date.today() - datetime.timedelta(days=365))
+            d2 = col2.date_input("To", datetime.date.today())
+            
+            if st.button("Load History"):
+                txs = db.run(f"SELECT * FROM transactions WHERE customer_phone='{cust['phone']}' AND date BETWEEN '{d1}' AND '{d2}' ORDER BY created_at DESC", fetch=True)
+                if txs:
+                    st.dataframe(pd.DataFrame(txs)[['date', 'invoice_id', 'total_amount', 'paid_amount', 'due_amount']], use_container_width=True)
+                    
+                    st.markdown("### Reprint")
+                    sale_txs = [t for t in txs if t['type'] == 'SALE']
+                    if sale_txs:
+                        inv_ids = [t['invoice_id'] for t in sale_txs]
+                        sel_inv = st.selectbox("Select Invoice", inv_ids)
+                        if st.button("Generate Copy"):
+                            inv_data = next(t for t in sale_txs if t['invoice_id'] == sel_inv)
+                            items = db.run(f"SELECT * FROM invoice_items WHERE invoice_id='{sel_inv}'", fetch=True)
+                            pdf = create_invoice(inv_data, items, cust)
+                            st.download_button("Download PDF", pdf, f"{sel_inv}.pdf", "application/pdf")
+                else: st.info("No data")
+
+    # --- 8. REPORTS (ADMIN ONLY) ---
+    elif choice == "Reports" and st.session_state.role == "admin":
         st.title("📈 Business Intelligence")
         
-        c1, c2 = st.columns(2)
-        d1 = c1.date_input("Start Date", datetime.date.today() - datetime.timedelta(days=30))
-        d2 = c2.date_input("End Date", datetime.date.today())
-        
-        if st.button("Generate Report"):
-            sales_q = f"SELECT * FROM transactions WHERE date BETWEEN '{d1}' AND '{d2}'"
-            sales = run_query(sales_q, fetch=True)
+        if st.button("Export All Sales (CSV)"):
+            df = pd.DataFrame(db.run("SELECT * FROM transactions", fetch=True))
+            st.download_button("Download CSV", df.to_csv(), "sales_dump.csv")
             
-            if sales:
-                df = pd.DataFrame(sales)
-                rev = df[df['type']=='SALE']['total_amount'].sum()
-                paid = df['paid_amount'].sum()
-                due = df['due_amount'].sum()
-                
-                st.markdown("### Financial Summary")
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Revenue", f"₹{rev:,.0f}")
-                m2.metric("Collections", f"₹{paid:,.0f}")
-                m3.metric("Pending", f"₹{due:,.0f}")
-                
-                st.markdown("### 📝 Audit Logs")
-                logs = run_query("SELECT timestamp, username, action, details FROM system_logs ORDER BY timestamp DESC LIMIT 50", fetch=True)
-                if logs: st.dataframe(pd.DataFrame(logs), use_container_width=True)
-            else:
-                st.info("No data in range")
+        st.markdown("### 📝 Audit Logs")
+        logs = db.run("SELECT timestamp, username, action, details FROM system_logs ORDER BY timestamp DESC LIMIT 50", fetch=True)
+        if logs: st.dataframe(pd.DataFrame(logs), use_container_width=True)
 
 if __name__ == "__main__":
     main()
